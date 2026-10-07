@@ -66,7 +66,6 @@
  <script>
    // ---- Data ----
  
-   // From the Notion table: country, Raph actual, Authors I want to read
    var books = [
      { country: 'Afghanistan', read: ['The Kite Runner - Khaled Hosseini'], want: [] },
      { country: 'Australia', read: ['Diary of a Bad Year - JM Coetzee'], want: [] },
@@ -120,7 +119,7 @@
      { country: 'Zimbabwe', read: [], want: ['Nervous Conditions - Tsitsi Dangarembga'] }
    ]
  
-   var totalCountries = 198 // countries listed in the Notion table
+   var totalCountries = 198
  
    // ---- Setup ----
  
@@ -191,7 +190,6 @@
      .catch(err => console.log('Failed on', err))
  
    function ready([json]) {
-     // Prepare the data
      var countries = topojson.feature(json, json.objects.countries)
      projection.fitSize([width, height], countries)
  
@@ -203,7 +201,6 @@
      d3.select('#read-count').text(readCountries.length)
      d3.select('#read-percent').text((readCountries.length / totalCountries * 100).toFixed(1) + '%')
  
-     // Functions that need the book data
      function className(d) {
        var b = booksByCountry.get(d.properties.name)
        if (!b) return 'country'
