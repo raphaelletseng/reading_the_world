@@ -1,0 +1,274 @@
+<!doctype html>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1">
+ <title>Reading the World</title>
+ <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@800&family=Karla:ital,wght@0,400;0,600;1,400&display=swap">
+ <style>
+   :root { --read: #00a6a6; --want: #ffc857; --land: #fff8ec; --ocean: #dff3f7; --border: #c3cdd8; --ink: #14213a; --muted: #5d6a80; --line: #d6dce5; --bg: #fff; }
+   body { font-family: 'Karla', sans-serif; background: var(--bg); color: var(--ink); max-width: 1000px; margin: 0 auto; padding: 24px 16px; }
+   h1 { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 42px; margin: 0 0 12px; }
+   .stat { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+   .stat-number { font-family: 'Syne', sans-serif; font-weight: 400; font-size: 28px; line-height: 0.5; color: var(--read); }
+   .stat-text { font-size: 18px; line-height: 1.2; color: var(--muted); }
+   .stat-text b { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 18px; color: var(--ink); }
+   .dropdown { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; padding: 0; border: none; border-radius: 6px; background: none; color: var(--read); cursor: pointer; }
+   .dropdown:hover, .dropdown[aria-expanded="true"] { color: var(--ink); }
+   .dropdown:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+   .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 12px; font-size: 14px; }
+   .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+   .card { background: var(--ocean); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+   .card svg { display: block; width: 100%; height: auto; }
+   .country { fill: var(--land); stroke: var(--border); stroke-width: 0.4; }
+   .country.read { fill: var(--read); }
+   .country.want { fill: var(--want); }
+   .country.has { cursor: pointer; outline: none; }
+   .country.has:hover, .country.has:focus-visible { stroke: var(--ink); stroke-width: 1.2; }
+   .dot { stroke: #fff; stroke-width: 1; }
+   .tooltip { position: absolute; display: none; max-width: 300px; padding: 12px 14px; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(10, 20, 40, 0.18); font-size: 14px; line-height: 1.4; pointer-events: none; }
+   .tooltip strong { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 20px; }
+   .tooltip h3 { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+   .tooltip h3 i { width: 10px; height: 10px; border-radius: 2px; }
+   .tooltip h3 i.read { background: var(--read); }
+   .tooltip h3 i.want { background: var(--want); }
+   .tooltip ul { margin: 0; padding-left: 18px; }
+   .tooltip li { margin-bottom: 3px; }
+   .author { color: var(--muted); }
+   .tooltip.wide { max-width: 420px; }
+   .tooltip.wide ul { columns: 2; column-gap: 24px; }
+ 
+   @media (max-width: 500px) {
+     h1 { font-size: 26px; }
+     .stat { gap: 12px; }
+     .stat-number { font-size: 24px; }
+     .stat-text { font-size: 15px; line-height: 1.4}
+     .stat-text b { font-size: 20px; }
+     .tooltip, .tooltip.wide { max-width: calc(100vw - 32px); box-sizing: border-box; }
+     .tooltip.wide ul { column-gap: 16px; }
+   }
+ </style>
+ 
+ <h1>Reading the World</h1>
+ <div class="stat">
+   <span class="stat-text"><span class="stat-number" id="read-count"></span> countries read<br><b id="read-percent"></b> of the world</span>
+   <button class="dropdown" aria-label="Show countries read" aria-expanded="false" aria-controls="tooltip">
+     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 5.5l1.5 1.5l2.5 -2.5M3.5 11.5l1.5 1.5l2.5 -2.5M3.5 17.5l1.5 1.5l2.5 -2.5M11 6h9M11 12h9M11 18h9"/></svg>
+   </button>
+ </div>
+ <div class="legend">
+   <span><i style="background: var(--read)"></i>Read</span>
+   <span><i style="background: var(--want)"></i>Want to read</span>
+ </div>
+ <div id="chart" class="card"></div>
+ <div class="tooltip" id="tooltip" aria-live="polite"></div>
+ 
+ <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+ <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+ <script>
+   // ---- Data ----
+ 
+   // From the Notion table: country, Raph actual, Authors I want to read
+   var books = [
+     { country: 'Afghanistan', read: ['The Kite Runner - Khaled Hosseini'], want: [] },
+     { country: 'Australia', read: ['Diary of a Bad Year - JM Coetzee'], want: [] },
+     { country: 'Belarus', read: [], want: ['Svetlana Alexievich'] },
+     { country: 'Belgium', read: [], want: ['Fear and Trembling - Amelie Nothomb'] },
+     { country: 'Brazil', read: ['The Alchemist - Paulo Coelho'], want: [] },
+     { country: 'Cambodia', read: ['The Ministry of Time - Kaliane Bradley'], want: [] },
+     { country: 'Canada', read: ['Kukum - Michel Jean', 'Women Talking - Miriam Toews', 'Washington Black - Esi Edugyan'], want: [] },
+     { country: 'Chile', read: ['City of the Beasts - Isabel Allende'], want: [] },
+     { country: 'China', read: ['Pleasure of Thinking - Wang Xiao Bo', 'Severance - Ling Ma', 'Beijing Comrades - Bei Tong'], want: ['The Dream of the Red Chamber - Cao Xue Qin', 'Mo Yan'] },
+     { country: 'Colombia', read: ['Chronicle of a Death Foretold - Gabriel Garcia Marquez'], want: [] },
+     { country: 'Ecuador', read: ['We Will Not Be Saved - Nemonte Nenquimo'], want: [] },
+     { country: 'Egypt', read: ['What Strange Paradise - Omar El Akkad'], want: ['Naguib Mahfouz'] },
+     { country: 'Finland', read: ['The Summer Book - Tove Jansson'], want: [] },
+     { country: 'France', read: ['The Phantom of the Opera - Gaston Leroux', "L'etranger - Albert Camus"], want: ['Exteriors - Annie Ernaux'] },
+     { country: 'Germany', read: ['Siddhartha - Herman Hesse'], want: [] },
+     { country: 'Ghana', read: ['Transcendent Kingdom - Yaa Gyasi'], want: [] },
+     { country: 'Greece', read: [], want: ['Odysseas Elytis'] },
+     { country: 'Hungary', read: [], want: ['László Krasznahorkai', 'Madga Szabo'] },
+     { country: 'Indonesia', read: ['This Earth of Mankind - Pramoedya Ananta Toer', 'Man Tiger - Eka Kurniawan'], want: [] },
+     { country: 'Ireland', read: ['Small Things Like These - Claire Keegan', 'Sally Rooney'], want: [] },
+     { country: 'Japan', read: ['Norwegian Wood - Haruki Murakami', 'Et si les chats disparaissaient du monde - Genki Kawamura', 'Strangers - Taichi Yamada', 'Tokyo Ueno Station - Yu Miri'], want: [] },
+     { country: 'Kenya', read: [], want: ['Wizard of the Crow - Ngugi wa Thiong'] },
+     { country: 'Libya', read: [], want: ['Anatomy of a Disappearance - Hisham Matar'] },
+     { country: 'Malaysia', read: ['The Garden of Evening Mists - Tan Twan Eng', 'The Night Tiger - Choo Yang Sze', 'The Accidental Malay - Karina Bahrin'], want: [] },
+     { country: 'Mexico', read: [], want: ['Carlos Fuentes'] },
+     { country: 'Morocco', read: [], want: ["L'enfant du Sable - Tahar Ben Jelloun"] },
+     { country: 'Mozambique', read: [], want: ['Sands of the Emperor (Woman of the Ashes) - Mia Couto'] },
+     { country: 'Nigeria', read: ['Things Fall Apart - Chinua Achebe'], want: ['Chimamanda Ngozi Adichie', 'Chinua Achebe', 'Chronicles from the Land of the Happiest People on Earth - Wole Soyinka (464)'] },
+     { country: 'Norway', read: ["A Doll's House - Henrik Ibsen", 'The Birds - Tarjei Vesaas'], want: [] },
+     { country: 'Pakistan', read: [], want: ['Home Fire - Kamila Shamsie'] },
+     { country: 'Palestine', read: [], want: ["The Hundred Years' War on Palestine - Rashid Khalidi"] },
+     { country: 'Poland', read: [], want: ['Olga Tokarczuk', 'Swimming in the Dark - Tomasz Jedrowski'] },
+     { country: 'Russia', read: ['Notes from Underground - Fyodor Dostoevsky'], want: [] },
+     { country: 'Rwanda', read: ['Jacaranda - Gael Faye'], want: ['Jacaranda - Gael Faye'] },
+     { country: 'Saint Lucia', read: [], want: ['Derek Walcott'] },
+     { country: 'Serbia', read: ["The Tiger's Wife - Tea Obreht"], want: [] },
+     { country: 'Singapore', read: ['Sugarbread - Balli Kaur Jaswal'], want: [] },
+     { country: 'South Africa', read: ['Born a Crime - Trevor Noah', 'Diary of a Bad Year - JM Coetzee'], want: [] },
+     { country: 'South Korea', read: ['The Vegetarian - Han Kang'], want: ['Han Kang', 'Chang Rae Lee', 'Almond - Won Pyung Sohn'] },
+     { country: 'Sri Lanka', read: [], want: ['Funny Boy - Shyam Selvadurai'] },
+     { country: 'Sweden', read: ['The 100 Year Old Man Who Climbed Out of the Window and Disappeared - Jonas Jonasson'], want: [] },
+     { country: 'Syria', read: ['Death is Hard Work - Khaled Khalifa'], want: [] },
+     { country: 'Taiwan', read: ['Taiwan Travelogue - Yang Shuang Zi'], want: [] },
+     { country: 'Tanzania', read: [], want: ['Gravel Heart - Abdulrazak Gurnah'] },
+     { country: 'Turkey', read: ['Madonna in a Fur Coat - Sabahattin Ali'], want: ['Orhan Pamuk', 'A Mind at Peace - Ahmet Hamdi Tanpınar'] },
+     { country: 'Uganda', read: [], want: ['Abyssinian Chronicles - Moses Isegawa'] },
+     { country: 'United Arab Emirates', read: [], want: ['Cities of Salt - Abdul Rahman Munif'] },
+     { country: 'United Kingdom', read: ['Never Let Me Go - Kazuo Ishiguro', 'Good Material - Dolly Alderton', 'A Clockwork Orange - Anthony Burgess'], want: [] },
+     { country: 'United States of America', read: ['Such a Fun Age - Kiley Reid', 'Of Mice and Men - John Steinbeck', 'Sula - Toni Morrison', "Giovanni's Room - James Baldwin", 'The Old Man and the Sea - Ernest Hemingway', 'Fahrenheit 451 - Ray Bradbury'], want: [] },
+     { country: 'Zimbabwe', read: [], want: ['Nervous Conditions - Tsitsi Dangarembga'] }
+   ]
+ 
+   var totalCountries = 198 // countries listed in the Notion table
+ 
+   // ---- Setup ----
+ 
+   var margin = { top: 0, right: 0, bottom: 0, left: 0 }
+   var width = 960 - margin.left - margin.right
+   var height = 500 - margin.top - margin.bottom
+ 
+   var svg = d3.select('#chart')
+     .append('svg')
+     .attr('role', 'group')
+     .attr('aria-label', 'World map of countries read and countries on the reading list')
+     .attr('viewBox', [0, 0, width + margin.left + margin.right, height + margin.top + margin.bottom])
+     .append('g')
+     .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')')
+ 
+   var tooltip = d3.select('.tooltip')
+ 
+   var projection = d3.geoNaturalEarth1()
+   var path = d3.geoPath().projection(projection)
+
+   // ---- Helpers ----
+ 
+   // 'Title - Author' becomes an italic title with a grey author; anything else is shown as-is
+   function formatBook(item) {
+     var parts = item.split(' - ')
+     if (parts.length < 2) return '<li>' + item + '</li>'
+     return '<li><em>' + parts[0] + '</em> <span class="author">' + parts.slice(1).join(' - ') + '</span></li>'
+   }
+ 
+   function list(title, type, items) {
+     if (!items.length) return ''
+     return '<h3><i class="' + type + '"></i>' + title + '</h3><ul>' + items.map(formatBook).join('') + '</ul>'
+   }
+ 
+   // The centre of an element, for placing the popup on keyboard focus
+   function centreOf(element) {
+     var r = element.getBoundingClientRect()
+     return { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }
+   }
+ 
+   function showTooltip(point, html) {
+     // Measure at the top-left so the popup isn't squeezed by its old position
+     tooltip.html(html).style('display', 'block').style('left', '0px').style('top', '0px')
+ 
+     // Flip to the other side of the pointer if the popup would go off screen, and keep it inside the window
+     var box = tooltip.node().getBoundingClientRect()
+     var x = point.clientX + 10
+     var y = point.clientY + 10
+     if (x + box.width > window.innerWidth - 8) x = point.clientX - box.width - 10
+     if (y + box.height > window.innerHeight - 8) y = point.clientY - box.height - 10
+     x = Math.max(8, Math.min(x, window.innerWidth - box.width - 8))
+     y = Math.max(8, y)
+ 
+     tooltip.style('left', (x + window.scrollX) + 'px').style('top', (y + window.scrollY) + 'px')
+   }
+ 
+   function hideTooltip() {
+     tooltip.classed('wide', false).style('display', 'none')
+     d3.select('.dropdown').attr('aria-expanded', 'false')
+   }
+ 
+   // ---- Load ----
+ 
+   Promise.all([
+     d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json')
+   ])
+     .then(ready)
+     .catch(err => console.log('Failed on', err))
+ 
+   function ready([json]) {
+     // Prepare the data
+     var countries = topojson.feature(json, json.objects.countries)
+     projection.fitSize([width, height], countries)
+ 
+     var booksByCountry = new Map(books.map(d => [d.country, d]))
+     var readCountries = books.filter(d => d.read.length).map(d => d.country)
+     var hasBooks = d => booksByCountry.has(d.properties.name)
+     var isTiny = d => hasBooks(d) && path.area(d) < 6
+ 
+     d3.select('#read-count').text(readCountries.length)
+     d3.select('#read-percent').text((readCountries.length / totalCountries * 100).toFixed(1) + '%')
+ 
+     // Functions that need the book data
+     function className(d) {
+       var b = booksByCountry.get(d.properties.name)
+       if (!b) return 'country'
+       return b.read.length ? 'country has read' : 'country has want'
+     }
+ 
+     function label(d) {
+       var b = booksByCountry.get(d.properties.name)
+       return b.country + ': ' + b.read.length + ' read, ' + b.want.length + ' want to read'
+     }
+ 
+     function showCountry(event, d) {
+       var b = booksByCountry.get(d.properties.name)
+       if (!b) return hideTooltip()
+       tooltip.classed('wide', false)
+       showTooltip(event, '<strong>' + b.country + '</strong>'
+         + list('Read', 'read', b.read)
+         + list('Want to read', 'want', b.want))
+     }
+ 
+     // Mouse follows the cursor, a tap or click opens the popup until you tap elsewhere, and Tab focuses
+     function addInteraction(selection) {
+       selection
+         .attr('tabindex', 0)
+         .attr('role', 'button')
+         .attr('aria-label', label)
+         .on('focus', function (event, d) { showCountry(centreOf(this), d) })
+         .on('blur', hideTooltip)
+         .on('pointermove', (event, d) => { if (event.pointerType === 'mouse') showCountry(event, d) })
+         .on('pointerleave', event => { if (event.pointerType === 'mouse') hideTooltip() })
+         .on('click', (event, d) => {
+           event.stopPropagation()
+           showCountry(event, d)
+         })
+     }
+ 
+     // Draw the countries
+     svg.selectAll('.country')
+       .data(countries.features)
+       .enter().append('path')
+       .attr('class', className)
+       .attr('d', path)
+       .filter(d => hasBooks(d) && !isTiny(d))
+       .call(addInteraction)
+ 
+     // Countries too small to hover or tap (like Singapore) get a dot instead
+     svg.selectAll('.dot')
+       .data(countries.features.filter(isTiny))
+       .enter().append('circle')
+       .attr('class', d => className(d) + ' dot')
+       .attr('r', 4)
+       .attr('transform', d => 'translate(' + path.centroid(d) + ')')
+       .call(addInteraction)
+ 
+     // Checklist button
+     d3.select('.dropdown').on('click', function (event) {
+       event.stopPropagation()
+       if (tooltip.classed('wide')) return hideTooltip()
+       tooltip.classed('wide', true)
+       d3.select(this).attr('aria-expanded', 'true')
+       showTooltip(centreOf(this), list('Countries read', 'read', readCountries))
+     })
+ 
+     // Clicking or tapping anywhere else, or pressing Escape, closes the popup
+     d3.select('body').on('click', hideTooltip)
+     d3.select('body').on('keydown', event => { if (event.key === 'Escape') hideTooltip() })
+   }
+ </script>
